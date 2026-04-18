@@ -18,14 +18,14 @@ class TransactionModel(Model):
         
         # Create normal agents
         for i in range(self.num_normal):
-            agent_id = f"user_normal_{i}"
-            a = NormalAgent(agent_id, self)
+            a = NormalAgent(self)
+            a.unique_id = f"user_normal_{i}"
             self.users.append(a)
             
         # Create fraud agents
         for i in range(self.num_fraud):
-            agent_id = f"user_fraud_{i}"
-            a = FraudAgent(agent_id, self)
+            a = FraudAgent(self)
+            a.unique_id = f"user_fraud_{i}"
             self.users.append(a)
 
     def record_transaction(self, source, target, amount, is_fraud):

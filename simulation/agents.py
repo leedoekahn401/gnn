@@ -5,8 +5,8 @@ class BaseUser(Agent):
     """
     Base user agent in the transaction network.
     """
-    def __init__(self, unique_id, model, is_fraud=False):
-        super().__init__(unique_id, model)
+    def __init__(self, model, is_fraud=False):
+        super().__init__(model)
         self.is_fraud = is_fraud
         self.balance = random.uniform(100, 10000)
 
@@ -17,8 +17,8 @@ class NormalAgent(BaseUser):
     """
     Normal agent that performs random transactions to other random agents.
     """
-    def __init__(self, unique_id, model):
-        super().__init__(unique_id, model, is_fraud=False)
+    def __init__(self, model):
+        super().__init__(model, is_fraud=False)
 
     def step(self):
         # Decide if this agent wants to transact this step (e.g., 10% chance)
@@ -39,8 +39,8 @@ class FraudAgent(BaseUser):
     Fraud agent that participates in circular transactions or rug pull.
     For MVP, we'll implement a simple circular/hub pattern.
     """
-    def __init__(self, unique_id, model):
-        super().__init__(unique_id, model, is_fraud=True)
+    def __init__(self, model):
+        super().__init__(model, is_fraud=True)
         self.target_hub = None
 
     def step(self):

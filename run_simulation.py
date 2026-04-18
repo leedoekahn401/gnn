@@ -10,7 +10,7 @@ from backend.db.neo4j_client import Neo4jClient
 def main():
     print("Starting Mesa Simulation...")
     # Initialize the model with 500 normal users and 50 fraud users
-    model = TransactionModel(num_normal=500, num_fraud=50)
+    model = TransactionModel(num_normal=500, num_fraud=100)
     
     # Run simulation for 20 steps
     print("Running simulation steps...")

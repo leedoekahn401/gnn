@@ -32,8 +32,11 @@ class Neo4jClient:
         MERGE (u:User {id: user.id})
         SET u.is_fraud = user.is_fraud, u.balance = user.balance
         """
+        batch_size = 5
         with self.driver.session() as session:
-            session.run(query, users=users)
+            for i in range(0, len(users), batch_size):
+                batch = users[i:i + batch_size]
+                session.run(query, users=batch)
 
     def insert_transactions(self, transactions):
         query = """
@@ -46,5 +49,8 @@ class Neo4jClient:
             r.is_fraud = tx.is_fraud,
             r.step = tx.step
         """
+        batch_size = 5
         with self.driver.session() as session:
-            session.run(query, transactions=transactions)
+            for i in range(0, len(transactions), batch_size):
+                batch = transactions[i:i + batch_size]
+                session.run(query, transactions=batch)

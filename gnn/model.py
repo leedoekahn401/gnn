@@ -1,22 +1,21 @@
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import GATConv
 
-class GraphSAGEModel(torch.nn.Module):
-    def __init__(self, num_features, hidden_channels, num_classes):
-        super(GraphSAGEModel, self).__init__()
-        # We use SAGEConv for inductive representation learning on large graphs
-        self.conv1 = SAGEConv(num_features, hidden_channels)
-        self.conv2 = SAGEConv(hidden_channels, num_classes)
+class FraudGNNModel(torch.nn.Module):
+    def __init__(self, num_features, hidden_channels, num_classes, edge_dim=1):
+        super(FraudGNNModel, self).__init__()
+        # GATConv supports edge attributes natively via edge_dim
+        self.conv1 = GATConv(num_features, hidden_channels, edge_dim=edge_dim)
+        self.conv2 = GATConv(hidden_channels, num_classes, edge_dim=edge_dim)
 
-    def forward(self, x, edge_index):
-        # First layer
-        x = self.conv1(x, edge_index)
+    def forward(self, x, edge_index, edge_attr):
+        # Pass edge_attr through the convolutional layers
+        x = self.conv1(x, edge_index, edge_attr=edge_attr)
         x = F.relu(x)
         x = F.dropout(x, p=0.5, training=self.training)
         
-        # Second layer
-        x = self.conv2(x, edge_index)
+        x = self.conv2(x, edge_index, edge_attr=edge_attr)
         
         # Log softmax for classification
         return F.log_softmax(x, dim=1)
