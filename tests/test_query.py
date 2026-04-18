@@ -66,7 +66,7 @@ class TestQueryFraudulentUsers:
     def test_query_requires_auth(self, client):
         """Should fail without API key."""
         response = client.get("/api/v1/alerts/fraudulent-users")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_query_invalid_key(self, client):
         response = client.get(

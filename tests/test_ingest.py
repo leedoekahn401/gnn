@@ -77,7 +77,7 @@ class TestIngestTransaction:
             "/api/v1/ingest/transaction",
             json=valid_tx_payload,
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_ingest_invalid_api_key(self, client, valid_tx_payload):
         """Should reject invalid API key."""

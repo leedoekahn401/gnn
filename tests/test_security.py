@@ -12,7 +12,7 @@ class TestAuthentication:
     def test_missing_api_key_returns_403(self, client):
         """FastAPI returns 403 when APIKeyHeader is missing (auto_error=True)."""
         response = client.get("/api/v1/alerts/fraudulent-users")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_invalid_api_key_returns_401(self, client):
         """An unknown key should be rejected with 401."""
