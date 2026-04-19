@@ -69,12 +69,18 @@ class Neo4jClient:
         
         - MERGE source and target User nodes with tenant_id
         - Create TRANSACTED relationship with transaction properties
+        - Bumps last_tx_at on both users so the batch scorer knows
+          there is new activity to evaluate
         """
         query = """
         MERGE (s:User {id: $source, tenant_id: $tenant_id})
-        ON CREATE SET s.balance = 0.0, s.is_fraud = false, s.fraud_score = 0.0
+        ON CREATE SET s.balance = 0.0, s.is_fraud = false,
+                      s.fraud_score = 0.0, s.last_scored_at = null
+        SET s.last_tx_at = datetime()
         MERGE (t:User {id: $target, tenant_id: $tenant_id})
-        ON CREATE SET t.balance = 0.0, t.is_fraud = false, t.fraud_score = 0.0
+        ON CREATE SET t.balance = 0.0, t.is_fraud = false,
+                      t.fraud_score = 0.0, t.last_scored_at = null
+        SET t.last_tx_at = datetime()
         MERGE (s)-[r:TRANSACTED {tx_id: $tx_id}]->(t)
         SET r.amount = $amount,
             r.timestamp = $timestamp,
@@ -120,10 +126,54 @@ class Neo4jClient:
             return {"nodes": [], "edges": []}
 
     def mark_fraud(self, user_hash: str, tenant_id: str, fraud_score: float = 1.0):
-        """Mark a user node as fraudulent with a fraud score."""
+        """Mark a user node as fraudulent with a fraud score and record scoring time."""
         query = """
         MATCH (u:User {id: $user_id, tenant_id: $tenant_id})
-        SET u.is_fraud = true, u.fraud_score = $fraud_score
+        SET u.is_fraud = true,
+            u.fraud_score = $fraud_score,
+            u.last_scored_at = datetime()
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_hash, tenant_id=tenant_id, fraud_score=fraud_score)
+
+    def get_unscored_users(self, limit: int = 100) -> list[dict]:
+        """
+        Return users that need (re-)scoring by the batch GNN scorer.
+        
+        A user needs scoring if:
+          1. They have never been scored (last_scored_at IS NULL), OR
+          2. They have new transactions since their last scoring
+             (last_tx_at > last_scored_at)
+        
+        This ensures that a previously-clean user who receives new
+        suspicious transactions will be re-evaluated.
+        
+        Returns a list of {user_id, tenant_id} dicts.
+        """
+        query = """
+        MATCH (u:User)
+        WHERE u.last_scored_at IS NULL
+           OR u.last_tx_at > u.last_scored_at
+        RETURN u.id AS user_id, u.tenant_id AS tenant_id
+        ORDER BY u.last_scored_at ASC
+        LIMIT $limit
+        """
+        results = []
+        with self.driver.session() as session:
+            records = session.run(query, limit=limit)
+            for record in records:
+                results.append({
+                    "user_id": record["user_id"],
+                    "tenant_id": record["tenant_id"],
+                })
+        return results
+
+    def mark_scored(self, user_hash: str, tenant_id: str, fraud_score: float):
+        """Mark a user as scored (not fraudulent) and record the timestamp."""
+        query = """
+        MATCH (u:User {id: $user_id, tenant_id: $tenant_id})
+        SET u.fraud_score = $fraud_score,
+            u.last_scored_at = datetime()
         """
         with self.driver.session() as session:
             session.run(query, user_id=user_hash, tenant_id=tenant_id, fraud_score=fraud_score)

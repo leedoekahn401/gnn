@@ -76,6 +76,9 @@ services:
       - NEO4J_PASSWORD=password123
       - GNN_MODEL_VERSION=v1
       - GNN_CHECKPOINT_DIR=/app/gnn/checkpoints
+      - FRAUD_THRESHOLD=0.7
+      - BATCH_INTERVAL_SECONDS=60
+      - BATCH_SIZE=100
     volumes:
       - ./gnn:/app/gnn
       - ./data:/app/data

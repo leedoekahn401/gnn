@@ -27,3 +27,6 @@ class FraudUsersResponse(BaseModel):
     """Response for the fraudulent users query."""
     tenant: str
     fraud_users: list[FraudUserOut]
+
+
+   
