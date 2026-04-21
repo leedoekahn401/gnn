@@ -1,4 +1,6 @@
 import os
+import random
+import uuid
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 
@@ -21,43 +23,49 @@ class Neo4jClient:
     def create_constraints(self):
         with self.driver.session() as session:
             try:
-                session.run("CREATE CONSTRAINT user_id IF NOT EXISTS FOR (u:User) REQUIRE u.id IS UNIQUE")
+                session.run("DROP CONSTRAINT user_id IF EXISTS")
+            except Exception:
+                pass
+            try:
+                session.run("CREATE INDEX user_tenant_idx IF NOT EXISTS FOR (u:User) ON (u.id, u.tenant_id)")
             except Exception as e:
-                print(f"Constraint creation warning: {e}")
+                print(f"Index creation warning: {e}")
 
     def clear_database(self):
         """Clears all nodes and relationships (use with caution!)"""
         with self.driver.session() as session:
             session.run("MATCH (n) DETACH DELETE n")
 
-    def insert_users(self, users):
+    def insert_users(self, users, tenant_id: str = "default"):
         query = """
         UNWIND $users AS user
-        MERGE (u:User {id: user.id})
-        SET u.is_fraud = user.is_fraud, u.balance = user.balance
+        MERGE (u:User {id: user.id, tenant_id: $tenant_id})
+        SET u.is_fraud = user.is_fraud, u.balance = user.balance,
+            u.fraud_score = CASE WHEN user.is_fraud THEN 1.0 ELSE 0.0 END
         """
-        batch_size = 5
+        batch_size = 100
         with self.driver.session() as session:
             for i in range(0, len(users), batch_size):
                 batch = users[i:i + batch_size]
-                session.run(query, users=batch)
+                session.run(query, users=batch, tenant_id=tenant_id)
 
-    def insert_transactions(self, transactions):
+    def insert_transactions(self, transactions, tenant_id: str = "default"):
         query = """
         UNWIND $transactions AS tx
-        MATCH (s:User {id: tx.source})
-        MATCH (t:User {id: tx.target})
+        MATCH (s:User {id: tx.source, tenant_id: $tenant_id})
+        MATCH (t:User {id: tx.target, tenant_id: $tenant_id})
         MERGE (s)-[r:TRANSACTED {tx_id: tx.tx_id}]->(t)
         SET r.amount = tx.amount,
             r.timestamp = tx.timestamp,
             r.is_fraud = tx.is_fraud,
-            r.step = tx.step
+            r.step = tx.step,
+            r.tenant_id = $tenant_id
         """
-        batch_size = 5
+        batch_size = 100
         with self.driver.session() as session:
             for i in range(0, len(transactions), batch_size):
                 batch = transactions[i:i + batch_size]
-                session.run(query, transactions=batch)
+                session.run(query, transactions=batch, tenant_id=tenant_id)
 
     # =========================================================================
     # Phase 2 Methods (Multi-tenant — tenant_id isolation)
@@ -96,6 +104,98 @@ class Neo4jClient:
                 timestamp=tx["timestamp"],
                 tenant_id=tenant_id,
             )
+
+    def get_dashboard_stats(self, tenant_id: str) -> dict:
+        """Fetch high-level metrics for the dashboard."""
+        query = """
+        MATCH (u:User {tenant_id: $tenant_id})
+        WITH count(u) AS total_nodes, 
+             sum(CASE WHEN u.is_fraud = true THEN 1 ELSE 0 END) AS fraud_detected,
+             max(u.last_scored_at) AS last_run
+        OPTIONAL MATCH (u1:User {tenant_id: $tenant_id})-[r:TRANSACTED]->(u2:User {tenant_id: $tenant_id})
+        RETURN total_nodes, count(r) AS total_edges, fraud_detected,
+               CASE WHEN total_nodes > 0 THEN (toFloat(fraud_detected) / total_nodes) * 100 ELSE 0 END AS fraud_rate,
+               last_run
+        """
+        with self.driver.session() as session:
+            result = session.run(query, tenant_id=tenant_id)
+            record = result.single()
+            if record:
+                return {
+                    "total_nodes": record["total_nodes"],
+                    "total_edges": record["total_edges"],
+                    "fraud_detected_24h": record["fraud_detected"],
+                    "fraud_rate_percentage": round(record["fraud_rate"], 2),
+                    "last_batch_run": record["last_run"].isoformat() if record["last_run"] else None
+                }
+            return {
+                "total_nodes": 0, "total_edges": 0, "fraud_detected_24h": 0,
+                "fraud_rate_percentage": 0.0, "last_batch_run": None
+            }
+
+    def get_graph_data(self, tenant_id: str, min_score: float = 0.0, limit: int = 100) -> dict:
+        """Fetch nodes and edges formatted for Sigma.js.
+        
+        Strictly respects the limit by only returning edges between the top nodes.
+        """
+        query = """
+        MATCH (u:User {tenant_id: $tenant_id})
+        WHERE u.fraud_score >= $min_score
+        WITH u ORDER BY u.fraud_score DESC LIMIT $limit
+        WITH collect(u) as nodes_list
+        UNWIND nodes_list as u
+        OPTIONAL MATCH (u)-[r:TRANSACTED]->(neighbor:User {tenant_id: $tenant_id})
+        WHERE neighbor IN nodes_list
+        RETURN u, r, neighbor
+        """
+        nodes = {}
+        edges = []
+        with self.driver.session() as session:
+            results = session.run(query, tenant_id=tenant_id, min_score=min_score, limit=limit)
+            for record in results:
+                u = record["u"]
+                if not u: continue
+                u_id = u["id"]
+                if u_id not in nodes:
+                    nodes[u_id] = {
+                        "key": u_id,
+                        "attributes": {
+                            "label": f"Wallet {u_id[:6]}...",
+                            "x": random.random(), "y": random.random(),
+                            "size": 5 + (u.get("balance", 0.0) / 1000.0),
+                            "fraud_score": u.get("fraud_score", 0.0),
+                            "balance": u.get("balance", 0.0),
+                            "is_fraud": u.get("is_fraud", False)
+                        }
+                    }
+                
+                neighbor = record["neighbor"]
+                r = record["r"]
+                if neighbor and r:
+                    neighbor_id = neighbor["id"]
+                    # neighbor is guaranteed to be in nodes_list because of the WHERE clause
+                    if neighbor_id not in nodes:
+                         nodes[neighbor_id] = {
+                            "key": neighbor_id,
+                            "attributes": {
+                                "label": f"Wallet {neighbor_id[:6]}...",
+                                "x": random.random(), "y": random.random(),
+                                "size": 5 + (neighbor.get("balance", 0.0) / 1000.0),
+                                "fraud_score": neighbor.get("fraud_score", 0.0),
+                                "balance": neighbor.get("balance", 0.0),
+                                "is_fraud": neighbor.get("is_fraud", False)
+                            }
+                        }
+                    edges.append({
+                        "key": r.get("tx_id", str(uuid.uuid4())),
+                        "source": u_id,
+                        "target": neighbor_id,
+                        "attributes": {
+                            "size": 1 + (r.get("amount", 0.0) / 5000.0),
+                            "amount": r.get("amount", 0.0)
+                        }
+                    })
+        return {"nodes": list(nodes.values()), "edges": edges}
 
     def get_neighborhood(self, user_hash: str, tenant_id: str, hops: int = 2) -> dict:
         """

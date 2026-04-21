@@ -104,6 +104,13 @@ def mock_neo4j_client():
     client.insert_transaction_multitenant = MagicMock()
     client.get_neighborhood = MagicMock(return_value={"nodes": [], "edges": []})
     client.mark_fraud = MagicMock()
+    client.get_dashboard_stats = MagicMock(return_value={
+        "total_nodes": 0, "total_edges": 0, "fraud_detected_24h": 0,
+        "fraud_rate_percentage": 0.0, "last_batch_run": None
+    })
+    client.get_graph_data = MagicMock(return_value={"nodes": [], "edges": []})
+    client.insert_users = MagicMock()
+    client.insert_transactions = MagicMock()
     client.close = MagicMock()
     return client
 

@@ -26,6 +26,6 @@ gnn/*.pth
 .DS_Store
 Thumbs.db
 
-# Intez`rnal docs (not for repo)
+# Internal docs (not for repo)
 prd.md
 neo4j.txt

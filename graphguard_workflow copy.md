@@ -1,4 +1,4 @@
-# GraphGuard — Project Workflow Diagrams
+# TribeTrace — Project Workflow Diagrams
 
 ## 1. High-Level System Architecture
 
@@ -129,7 +129,7 @@ sequenceDiagram
     API->>SQLite: Verify API Key
     SQLite-->>API: ✅ tenant_id, name
 
-    Note over API: Hash source & target IDs<br/>SHA-256(tenant_id::graphguard::raw_id)
+    Note over API: Hash source & target IDs<br/>SHA-256(tenant_id::TribeTrace::raw_id)
 
     API->>Kafka: Publish to "raw_transactions"<br/>{tenant_id, anonymized_tx}
     API-->>Client: 200 OK — "Transaction securely<br/>anonymized and queued."
@@ -209,8 +209,8 @@ sequenceDiagram
 graph TB
     NEO4J["🗄️ neo4j:latest<br/>Container: neo4j_db<br/>Ports: 7474, 7687"]
     KAFKA["📡 bitnamilegacy/kafka:latest<br/>Container: kafka_broker<br/>Ports: 9092, 29092"]
-    API_SVC["⚡ graphguard_api<br/>uvicorn api.main:app<br/>Port: 8000"]
-    WORKER_SVC["⚙️ graphguard_worker<br/>python -m worker.consumer"]
+    API_SVC["⚡ TribeTrace_api<br/>uvicorn api.main:app<br/>Port: 8000"]
+    WORKER_SVC["⚙️ TribeTrace_worker<br/>python -m worker.consumer"]
     VOLUMES["📁 Volumes<br/>neo4j_data, neo4j_logs"]
 
     API_SVC -->|"depends_on: healthy"| KAFKA

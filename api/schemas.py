@@ -29,4 +29,67 @@ class FraudUsersResponse(BaseModel):
     fraud_users: list[FraudUserOut]
 
 
+class DashboardStats(BaseModel):
+    total_nodes: int
+    total_edges: int
+    fraud_detected_24h: int
+    fraud_rate_percentage: float
+    last_batch_run: str | None
+
+
+class GraphNodeAttributes(BaseModel):
+    label: str
+    x: float
+    y: float
+    size: float
+    fraud_score: float
+    balance: float
+    is_fraud: bool
+
+
+class GraphNode(BaseModel):
+    key: str
+    attributes: GraphNodeAttributes
+
+
+class GraphEdgeAttributes(BaseModel):
+    size: float
+    amount: float
+
+
+class GraphEdge(BaseModel):
+    key: str
+    source: str
+    target: str
+    attributes: GraphEdgeAttributes
+
+
+class GraphData(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
+class SimulationRequest(BaseModel):
+    normal_agents: int = 50
+    fraud_agents: int = 10
+    epochs: int = 100
+
+
+class SimulationJobResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+class SimulationMetrics(BaseModel):
+    f1_score: float
+    precision: float
+    recall: float
+    auc: float
+
+
+class SimulationResults(BaseModel):
+    status: str
+    metrics: SimulationMetrics | None = None
+
+
    
